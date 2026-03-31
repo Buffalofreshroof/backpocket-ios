@@ -13,7 +13,6 @@ jobs:
 
       - name: Install certificate and provisioning profile
         env:
-          CERTIFICATES_P12: ${{ secrets.CERTIFICATES_P12 }}
           PROVISION_PROFILE: ${{ secrets.PROVISION_PROFILE }}
         run: |
           CERT_PATH=$RUNNER_TEMP/cert.p12
@@ -21,11 +20,12 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -hex 12)
 
-          echo "$CERTIFICATES_P12" | tr -d '[:space:]' | base64 --decode > $CERT_PATH
+          cat cert.b64 | base64 --decode > $CERT_PATH
           echo "$PROVISION_PROFILE" | tr -d '[:space:]' | base64 --decode > $PP_PATH
 
           echo "P12 file size: $(wc -c < $CERT_PATH) bytes"
           echo "PP file size: $(wc -c < $PP_PATH) bytes"
+          openssl pkcs12 -in $CERT_PATH -passin pass:x -noout && echo "P12 verify: OK" || echo "P12 verify: FAILED"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
