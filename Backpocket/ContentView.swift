@@ -16,6 +16,10 @@ struct WebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+
+        // Add message handler so JS can send the email back to Swift
+        config.userContentController.add(context.coordinator, name: "tokenRegistration")
+
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = context.coordinator
         wv.allowsBackForwardNavigationGestures = true
@@ -28,8 +32,16 @@ struct WebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
-    class Coordinator: NSObject, WKNavigationDelegate {
+    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         private var tokenSent = false
+
+        // Called when JS posts a message via webkit.messageHandlers.tokenRegistration.postMessage(email)
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard !tokenSent else { return }
+            guard let email = message.body as? String, !email.isEmpty else { return }
+            guard let token = AppDelegate.deviceToken else { return }
+            registerToken(token: token, email: email)
+        }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if let url = navigationAction.request.url, let host = url.host, !host.contains("backpocketbets.de") {
@@ -42,16 +54,29 @@ struct WebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard !tokenSent else { return }
-            guard let token = AppDelegate.deviceToken else { return }
             guard webView.url?.path.contains("dashboard") == true || webView.url?.path.contains("pikvm") == true else { return }
 
-            // Fetch email from session API
-            let js = "fetch('/api/session-info.php').then(r=>r.json()).then(d=>d.email||'').catch(()=>'')"
-            webView.evaluateJavaScript(js) { result, _ in
-                if let email = result as? String, !email.isEmpty {
-                    self.registerToken(token: token, email: email)
-                }
+            // Try immediately, and also retry after 3 seconds (APNs token may arrive late)
+            injectTokenScript(webView)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard self?.tokenSent == false else { return }
+                self?.injectTokenScript(webView)
             }
+        }
+
+        private func injectTokenScript(_ webView: WKWebView) {
+            // Fetch email from session API, then post it back to Swift via message handler
+            let js = """
+            fetch('/api/session-info.php')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.email) {
+                        webkit.messageHandlers.tokenRegistration.postMessage(d.email);
+                    }
+                })
+                .catch(function() {});
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
         }
 
         private func registerToken(token: String, email: String) {
