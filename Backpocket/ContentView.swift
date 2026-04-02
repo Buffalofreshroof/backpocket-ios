@@ -43,37 +43,10 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard !tokenSent else { return }
             guard let token = AppDelegate.deviceToken else { return }
+            guard webView.url?.path.contains("dashboard") == true || webView.url?.path.contains("pikvm") == true else { return }
 
-            // Check if user is logged in by reading session email from the page
-            let js = """
-            (function() {
-                var el = document.querySelector('[data-user-email]');
-                if (el) return el.getAttribute('data-user-email');
-                // Fallback: check if on dashboard (means logged in)
-                if (window.location.pathname.includes('dashboard')) {
-                    return document.querySelector('.navbar')?.textContent?.match(/[\\w.+-]+@[\\w-]+\\.[\\w.]+/)?.[0] || '';
-                }
-                return '';
-            })()
-            """
-            webView.evaluateJavaScript(js) { result, _ in
-                // Try to get email from page; if on dashboard, use a cookie-based approach
-                let email = (result as? String) ?? ""
-                if !email.isEmpty {
-                    self.registerToken(token: token, email: email)
-                } else if webView.url?.path.contains("dashboard") == true {
-                    // User is logged in but we can't extract email from JS
-                    // Try fetching it from the session API
-                    self.fetchEmailAndRegister(webView: webView, token: token)
-                }
-            }
-        }
-
-        private func fetchEmailAndRegister(webView: WKWebView, token: String) {
-            // Use a simple fetch inside the webview to get the logged-in user's email
-            let js = """
-            fetch('/api/get-p2-data.php').then(r => r.json()).then(d => d.email || '').catch(() => '')
-            """
+            // Fetch email from session API
+            let js = "fetch('/api/session-info.php').then(r=>r.json()).then(d=>d.email||'').catch(()=>'')"
             webView.evaluateJavaScript(js) { result, _ in
                 if let email = result as? String, !email.isEmpty {
                     self.registerToken(token: token, email: email)
