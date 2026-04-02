@@ -56,7 +56,7 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISION_PROFILE_NAME }}" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             -skipPackagePluginValidation \
-            archive 2>&1 | tail -30
+            archive
 
       - name: Create ExportOptions.plist
         run: |
