@@ -40,7 +40,7 @@ jobs:
       - name: Select Xcode
         run: |
           ls /Applications/ | grep Xcode
-          sudo xcode-select -s /Applications/Xcode_16.2.app || sudo xcode-select -s /Applications/Xcode_16.1.app || sudo xcode-select -s /Applications/Xcode.app
+          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s /Applications/Xcode_16.3.app || sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
 
       - name: Build archive
